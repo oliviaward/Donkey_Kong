@@ -1,4 +1,6 @@
-"use strict"; //incorporating this 'expression' tells the browser to enable 'strict mode' - this mode helps ensure you write better code, for example, it prevents the use of undeclared variables.
+"use strict";
+
+ //incorporating this 'expression' tells the browser to enable 'strict mode' - this mode helps ensure you write better code, for example, it prevents the use of undeclared variables.
 
 
 //task 1 --------------
@@ -23,8 +25,51 @@
 const vp_width = window.innerWidth, vp_height = window.innerHeight; //defined global const variables to hold the (vp) details (e.g., size, etc.)
 var engine, world, body; //defined global variables to hold the game's viewport and the 'matter' engine components
 var viewport;
+let ground = null;
+let ball;
+const land = [];
 
-class envObj {
+//object for the background
+
+const environment = {
+	_ladders: [],
+	_platforms : [],
+	get platforms () {
+		return this._platforms;
+	},
+	set platforms (plat) {
+		this.addEnvObj(this._platforms, item);		
+	},
+	get ladders () {
+		return this._ladders;
+	},
+	set ladders (ladder) {
+		this.addEnvObj(this._ladders, ladder);
+	},
+	addEnvObj (obj, item) {
+		if (Array.isArray(item)) {
+			console.log(true);
+			console.log(item)
+			item.forEach((element, index) => obj.push(element[index]))
+		} else {
+			obj.push(item);			
+		}	
+	},
+	displayEnvObj () {
+		if (this.ladders.length > 0) {
+			this.ladders.forEach(ladder => ladder.show())
+		}
+		if (this.platforms.length > 0) {
+			this.platforms.forEach( platform => platform.show())
+		}
+	},
+	paint_background() {
+		background(50, 50, 50);
+	}
+}
+
+
+class EnvObj {
 	constructor(x, y, width, height) {
 		this._x = x;
 		this._y = y;
@@ -45,13 +90,13 @@ class envObj {
 	}
 }
 
-class Floor extends envObj {
+class Floor extends EnvObj {
 	constructor(x, y, width, height) {
 		super(x, y, width, height);
 		//.boundary = Matter.Bodies.rectangle(x, y, width, height, {isStatic: true});
 		let options = {
 			isStatic: true,
-			restitution: 0.39,
+			restitution: 0,
 			friction: 0,
 			density: 1
 		}
@@ -62,50 +107,71 @@ class Floor extends envObj {
 		let pos = this.body.position; //create an shortcut alias  //switch centre to be centre rather than left, top
 		fill('#00ff00'); //set tXhe fill colour
 		rectMode(CENTER)
-		rect(x, y, width, height); //draw the rectangle
+		rect(this.x, this.y, this.width, this.height); //draw the rectangle
 	}
 
 	//generates the floor (bottom plaform)
 }
 
-//object for the background
-const environment = {
-//object for the floor	
-	floor: new Floor(vp_width, vp_height - 100, vp_width / 4, vp_height / 100 * 10),
-	_ladders: [],
-	_platforms : [],
-	get platforms () {
-		return this._platforms;
-	},
-	set platforms (plat) {
-		this.addEnvObj(this._platforms, item);		
-	},
-	get ladders () {
-		return this._ladders;
-	},
-	set ladders (ladder) {
-		this.addEnvObj(this._ladders, ladder);
-	},
-	addEnvObj (obj, item) {
-		if (Array.isArray(item)) {
-			item.forEach(element => obj.push(element));
-		} else {
-			obj.push(item);			
-		}	
-	},
-	displayEnvObj () {
-		if (this.ladders.length > 0) {
-			this.ladders.forEach( ladder => ladder.generator())
+class Platform extends EnvObj {
+	constructor(x, y, width, height, angle = 0) {
+		super(x, y, width, height);
+		//.boundary = Matter.Bodies.rectangle(x, y, width, height, {isStatic: true});
+		let options = {
+			isStatic: true,
+			restitution: 0.39,
+			friction: 0,
+			angle: angle
+		}
+		this.body = Matter.Bodies.rectangle(x, y, width, height, options);
+		Matter.World.add(world, this.body);
+	}
+	show() {
+		push();
+		translate(this.width / 2, this.height / 2)
+		rotate(this.body.angle)
+		fill('#00ff00'); //set tXhe fill colour
+		noStroke();
+		rectMode(CENTER)
+		rect(this.x, this.y, this.width, this.height); //draw the rectangle
+		pop();
+	}	
+}
 
+class c_fuzzball {
+	constructor(x, y, diameter) {
+		let options = {
+			restitution: 1,
+			friction: 0.005,
+			density: 0.95,
+			frictionAir: 0.005,
 		}
-		if (this.platforms.length > 0) {
-			this.ladders.forEach( ladder => ladder.generator())
-		}
-	},
-	paint_background() {
-		background(50, 50, 50);
+		this.body = Matter.Bodies.circle(x, y, diameter/2, options); //matter.js used radius rather than diameter
+		Matter.World.add(world, this.body);
+		
+		this.x = x;
+		this.y = y;
+		this.diameter = diameter;
+	}
+
+	body() {
+		return this.body;
+	}
+
+	show() {
+		let pos = this.body.position;
+		let angle = this.body.angle;
+
+		push(); //p5 translation 
+			translate(pos.x, pos.y);
+			rotate(angle);
+			fill('#ff0000');
+			ellipseMode(CENTER); //switch centre to be centre rather than left, top
+			circle(0, 0, this.diameter);
+		pop();
 	}
 }
+
 
 
 
@@ -128,8 +194,6 @@ function get_random(min, max) {
 function preload() {
 	//a 'p5' defined function runs automatically and used to handle asynchronous loading of external files in a blocking way; once complete
 	//the 'setup' function is called (automatically)
-	environment.floor.image = loadImage('./images/ground.jpg');
-	environment.ladders = new envObj ((vp_width / 100 * 70), (vp_height - 200), (vp_width / 100 * 10), (vp_height / 100 * 10), loadImage('./images/ladder.png'));
 }
 
 
@@ -143,11 +207,17 @@ function setup() {
 	world = engine.world; //the instance of the world (contains all bodies, constraints, etc) to be simulated by the engine
 	body = Matter.Body; //the module that contains all 'matter' methods for creating and manipulating 'body' models a 'matter' body 
 	//is a 'rigid' body that can be simulated by the Matter.Engine; generally defined as rectangles, circles and other polygons)
-	/*Matter.Engine.run(engine)
-	Matter.World.add(world, environment.floor.ground);
-	*/
+	Matter.Engine.run(engine);
+	frameRate(60); //specifies the number of (refresh) frames displayed every second
+	ground = new Floor(vp_width / 2, vp_height - 25, vp_width, vp_height / 100 * 4);
+	ball = new c_fuzzball(vp_width / 100 * 5, 160, 10);
+	const row1 = [(new Platform(vp_width / 100 * 3, 170, vp_width / 100 * 50, vp_height / 100 * 2, 0)), (new Platform(vp_width / 100 * 53, 153.75, vp_width / 100 * 35, vp_height / 100 * 2, 0.025))];  
+	const row2 = [(new Platform(vp_width -(vp_width / 100 * 88.5), 318, vp_width / 100 * 29, vp_height / 100 * 2, -0.010)), (new Platform(vp_width -(vp_width / 100 * 60.5), 315.5, vp_width / 100 * 29, vp_height / 100 * 2, -0.005)), (new Platform(vp_width - (vp_width / 100 * 32), 325, vp_width / 100 * 29, vp_height / 100 * 2, -0.015))];
+	const row3 = [(new Platform(vp_width / 100 * 3, 465, vp_width / 100 * 29, vp_height / 100 * 2, 0.04)), (new Platform(vp_width -(vp_width / 100 * 68.25), 465, vp_width / 100 * 29, vp_height / 100 * 2, 0.04)), (new Platform(vp_width -(vp_width / 100 * 39.25), 465, vp_width / 100 * 29, vp_height / 100 * 2, 0.04))]
+	const row4 = [(new Platform(vp_width -(vp_width / 100 * 89.5), 647.5, vp_width / 100 * 29, vp_height / 100 * 2, -0.010)), (new Platform(vp_width -(vp_width / 100 * 60.5), 645, vp_width / 100 * 29, vp_height / 100 * 2, -0.005)), (new Platform(vp_width - (vp_width / 100 * 32), 655, vp_width / 100 * 29, vp_height / 100 * 2, -0.015))];
+	const row5 = [(new Platform(vp_width / 100 * 3, 800, vp_width / 100 * 29, vp_height / 100 * 2, 0.01)), (new Platform(vp_width -(vp_width / 100 * 68.25), 800, vp_width / 100 * 29, vp_height / 100 * 2, 0.01)), (new Platform(vp_width -(vp_width / 100 * 39.25), 800, vp_width / 100 * 29, vp_height / 100 * 2, 0.01))]
+	land.push(row1, row2, row3, row4, row5);
 
-	frameRate(1); //specifies the number of (refresh) frames displayed every second
 
 }
 
@@ -155,11 +225,25 @@ function paint_assets() {
 	//a defined function to 'paint' assets to the canvas
 }
 
+environment.addEnvObj(environment._platforms, land);
 
 function draw() {
 	//a 'p5' defined function that runs automatically and continously (up to your system's hardware/os limit) and based on any specified frame rate
 	environment.paint_background();
-	environment.floor.generateFloor();
-	environment.displayEnvObj();
-
+	ground.show();
+	land[0][0].show()
+	land[0][1].show()
+	land[1][0].show()
+	land[1][1].show()
+	land[1][2].show()
+	land[2][0].show()
+	land[2][1].show()
+	land[2][2].show()
+	land[3][0].show()
+	land[3][1].show()
+	land[3][2].show()
+	land[4][0].show()
+	land[4][1].show()
+	land[4][2].show()
+	ball.show()
 } 
